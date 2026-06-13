@@ -11,9 +11,14 @@ import type {
 const roomPresence = new Map<string, Map<string, PresenceUser>>();
 
 export function initSocketServer(httpServer: HTTPServer) {
+  // Accept the configured app URL, or any origin in development.
+  const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL
+    ? [process.env.NEXT_PUBLIC_APP_URL]
+    : true; // true = accept all origins (safe for local dev)
+
   const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: {
-      origin: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+      origin: allowedOrigin,
       methods: ["GET", "POST"],
       credentials: true,
     },

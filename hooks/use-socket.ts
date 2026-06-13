@@ -25,8 +25,11 @@ export function useSocket({ roomId, user }: UseSocketOptions) {
   useEffect(() => {
     if (!roomId || !user.id) return;
 
-    // No `path` override — defaults to "/socket.io" which matches the server.
-    const socket: AppSocket = io({
+    // NEXT_PUBLIC_SOCKET_URL should be set when the socket server runs on a
+    // separate host (e.g. Railway). Leave it empty for local dev or when the
+    // full app runs on a single server (Railway full-deploy).
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ?? "";
+    const socket: AppSocket = io(socketUrl, {
       transports: ["websocket", "polling"],
     });
 

@@ -17,13 +17,21 @@ export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
 
+  // Read once on mount — safe inside useState initializer (client-only).
+  const [callbackUrl] = useState<string>(() => {
+    if (typeof window === "undefined") return "/dashboard";
+    const p = new URLSearchParams(window.location.search).get("callbackUrl");
+    // Only allow relative paths to prevent open-redirect attacks.
+    return p && p.startsWith("/") ? p : "/dashboard";
+  });
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await login(email, password);
-      router.push("/dashboard");
+      router.push(callbackUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

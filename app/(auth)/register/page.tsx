@@ -18,6 +18,12 @@ export default function RegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
 
+  const [callbackUrl] = useState<string>(() => {
+    if (typeof window === "undefined") return "/dashboard";
+    const p = new URLSearchParams(window.location.search).get("callbackUrl");
+    return p && p.startsWith("/") ? p : "/dashboard";
+  });
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
@@ -28,7 +34,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(name, email, password);
-      router.push("/dashboard");
+      router.push(callbackUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {

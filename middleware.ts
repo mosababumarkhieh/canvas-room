@@ -6,7 +6,6 @@ const PUBLIC_PATHS = ["/login", "/register", "/api/auth/login", "/api/auth/regis
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow public paths and static files
   if (
     PUBLIC_PATHS.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/_next") ||
@@ -17,11 +16,16 @@ export function middleware(request: NextRequest) {
 
   const token = request.cookies.get("cr_session")?.value;
 
-  // Redirect to login if no session cookie on protected routes
   if (!token && !pathname.startsWith("/api/")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    // Preserve the full original URL (path + query string) so guests land back
+    // on their share link after logging in — keeping the ?token= param intact.
+    loginUrl.searchParams.set(
+      "callbackUrl",
+      request.nextUrl.pathname + request.nextUrl.search
+    );
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
