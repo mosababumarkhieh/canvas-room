@@ -19,12 +19,14 @@ interface UseSocketOptions {
 
 export function useSocket({ roomId, user }: UseSocketOptions) {
   const socketRef = useRef<AppSocket | null>(null);
-  const { addObject, updateObject, deleteObject, clearBoard, updateCursor, removeCursor, setPresenceUsers } =
-    useCanvasStore();
 
+  // Pull store actions once via getState() inside the effect so the effect
+  // dependency array stays stable — these Zustand actions never change identity.
   useEffect(() => {
+    if (!roomId || !user.id) return;
+
+    // No `path` override — defaults to "/socket.io" which matches the server.
     const socket: AppSocket = io({
-      path: "/api/socket",
       transports: ["websocket", "polling"],
     });
 
@@ -35,38 +37,43 @@ export function useSocket({ roomId, user }: UseSocketOptions) {
     });
 
     socket.on("room:users", (users) => {
-      setPresenceUsers(users);
+      useCanvasStore.getState().setPresenceUsers(users);
     });
 
+    // Remote mutations: do NOT set isDirty or push history.
+    // The sender's client is responsible for its own autosave.
     socket.on("object:draw", (object) => {
-      addObject(object);
+      useCanvasStore.getState().addRemoteObject(object);
     });
 
     socket.on("object:update", (object) => {
-      updateObject(object.id, object);
+      useCanvasStore.getState().updateRemoteObject(object.id, object);
     });
 
     socket.on("object:delete", (objectId) => {
-      deleteObject(objectId);
+      useCanvasStore.getState().deleteRemoteObject(objectId);
     });
 
     socket.on("board:clear", () => {
-      clearBoard();
+      useCanvasStore.getState().clearRemoteBoard();
     });
 
     socket.on("cursor:update", (cursor) => {
-      updateCursor(cursor);
+      useCanvasStore.getState().updateCursor(cursor);
     });
 
     socket.on("cursor:remove", (userId) => {
-      removeCursor(userId);
+      useCanvasStore.getState().removeCursor(userId);
     });
 
     return () => {
       socket.emit("room:leave", roomId);
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, [roomId, user, addObject, updateObject, deleteObject, clearBoard, updateCursor, removeCursor, setPresenceUsers]);
+  // Only reconnect when the actual room or user identity changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, user.id]);
 
   const emitDraw = useCallback((object: WhiteboardObject) => {
     socketRef.current?.emit("object:draw", { roomId, object });

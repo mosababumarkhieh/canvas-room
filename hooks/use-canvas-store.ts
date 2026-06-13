@@ -44,12 +44,18 @@ interface CanvasStore {
   // Dirty flag for autosave
   isDirty: boolean;
 
-  // Actions
+  // Actions — local (mark isDirty, push history)
   setObjects: (objects: WhiteboardObject[]) => void;
   addObject: (object: WhiteboardObject) => void;
   updateObject: (id: string, update: Partial<WhiteboardObject>) => void;
   deleteObject: (id: string) => void;
   clearBoard: () => void;
+
+  // Remote actions — apply incoming socket events without triggering autosave or history
+  addRemoteObject: (object: WhiteboardObject) => void;
+  updateRemoteObject: (id: string, update: Partial<WhiteboardObject>) => void;
+  deleteRemoteObject: (id: string) => void;
+  clearRemoteBoard: () => void;
 
   setDrawingObject: (object: WhiteboardObject | null) => void;
   commitDrawingObject: () => WhiteboardObject | null;
@@ -123,6 +129,29 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   clearBoard: () => {
     get().pushHistory([]);
     set({ objects: [], selectedId: null, isDirty: true });
+  },
+
+  addRemoteObject: (object) => {
+    set((state) => ({ objects: [...state.objects, object] }));
+  },
+
+  updateRemoteObject: (id, update) => {
+    set((state) => ({
+      objects: state.objects.map((o) =>
+        o.id === id ? ({ ...o, ...update } as WhiteboardObject) : o
+      ),
+    }));
+  },
+
+  deleteRemoteObject: (id) => {
+    set((state) => ({
+      objects: state.objects.filter((o) => o.id !== id),
+      selectedId: state.selectedId === id ? null : state.selectedId,
+    }));
+  },
+
+  clearRemoteBoard: () => {
+    set({ objects: [], selectedId: null });
   },
 
   setDrawingObject: (drawingObject) => set({ drawingObject }),

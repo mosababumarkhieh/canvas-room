@@ -24,6 +24,12 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  // Read share token from URL once on mount (client-only, safe inside useState initializer).
+  const [shareToken] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("token");
+  });
+
   const { setObjects, undo, redo, clearBoard, presenceUsers } = useCanvasStore();
 
   const { saveStatus } = useAutosave(roomId);
@@ -34,8 +40,12 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
 
     async function load() {
       try {
+        const roomUrl = shareToken
+          ? `/api/rooms/${roomId}?token=${encodeURIComponent(shareToken)}`
+          : `/api/rooms/${roomId}`;
+
         const [roomRes, objectsRes] = await Promise.all([
-          fetch(`/api/rooms/${roomId}`),
+          fetch(roomUrl),
           fetch(`/api/rooms/${roomId}/objects`),
         ]);
 
@@ -59,7 +69,7 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
     }
 
     load();
-  }, [user, roomId, setObjects]);
+  }, [user, roomId, shareToken, setObjects]);
 
   // Socket setup (only after user and room are confirmed)
   const socket = useSocket(
