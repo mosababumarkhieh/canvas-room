@@ -111,7 +111,10 @@ export default function RegisterPage() {
 
           <p className="mt-6 text-center text-sm text-zinc-500">
             Already have an account?{" "}
-            <Link href="/login" className="text-indigo-600 font-medium hover:underline">
+            <Link
+              href={callbackUrl !== "/dashboard" ? `/login?callbackUrl=${encodeURIComponent(callbackUrl)}` : "/login"}
+              className="text-indigo-600 font-medium hover:underline"
+            >
               Sign in
             </Link>
           </p>

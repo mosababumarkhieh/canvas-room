@@ -24,19 +24,27 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Read share token from URL once on mount (client-only, safe inside useState initializer).
-  const [shareToken] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return new URLSearchParams(window.location.search).get("token");
-  });
+  // useState initializers run on the server where window is undefined — always null.
+  // useEffect runs only on the client after hydration, so window.location is safe.
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  useEffect(() => {
+    setShareToken(new URLSearchParams(window.location.search).get("token"));
+  }, []);
 
   const { setObjects, undo, redo, clearBoard, presenceUsers } = useCanvasStore();
 
   const { saveStatus } = useAutosave(roomId);
 
-  // Load room + board state
+  // Load room + board state — waits until both user and shareToken are resolved.
   useEffect(() => {
-    if (!user) return;
+    // shareToken starts null and is set asynchronously by the effect above.
+    // We delay the load until the token effect has had a chance to run by
+    // checking whether the URL actually contains a token param.
+    const urlHasToken = typeof window !== "undefined"
+      && new URLSearchParams(window.location.search).has("token");
+
+    // If the URL has a token but shareToken hasn't been set yet, wait.
+    if (!user || (urlHasToken && shareToken === null)) return;
 
     async function load() {
       try {
