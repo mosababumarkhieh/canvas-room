@@ -40,6 +40,7 @@ interface CanvasStore {
   // Collaboration
   cursors: Record<string, CursorPosition>;
   presenceUsers: PresenceUser[];
+  permissions: Record<string, "edit" | "view">;
 
   // Dirty flag for autosave
   isDirty: boolean;
@@ -56,6 +57,7 @@ interface CanvasStore {
   updateRemoteObject: (id: string, update: Partial<WhiteboardObject>) => void;
   deleteRemoteObject: (id: string) => void;
   clearRemoteBoard: () => void;
+  syncRemoteBoard: (objects: WhiteboardObject[]) => void;
 
   setDrawingObject: (object: WhiteboardObject | null) => void;
   commitDrawingObject: () => WhiteboardObject | null;
@@ -75,6 +77,8 @@ interface CanvasStore {
   updateCursor: (cursor: CursorPosition) => void;
   removeCursor: (userId: string) => void;
   setPresenceUsers: (users: PresenceUser[]) => void;
+  setUserPermission: (userId: string, permission: "edit" | "view") => void;
+  initPermissions: (permissions: Array<{ userId: string; permission: "edit" | "view" }>) => void;
 
   setDirty: (dirty: boolean) => void;
 
@@ -100,6 +104,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   historyIndex: -1,
   cursors: {},
   presenceUsers: [],
+  permissions: {},
   isDirty: false,
 
   setObjects: (objects) => {
@@ -152,6 +157,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   clearRemoteBoard: () => {
     set({ objects: [], selectedId: null });
+  },
+
+  // Replace board state from a remote undo/redo sync (no history push)
+  syncRemoteBoard: (objects) => {
+    set({ objects, selectedId: null });
   },
 
   setDrawingObject: (drawingObject) => set({ drawingObject }),
@@ -211,6 +221,20 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   setPresenceUsers: (presenceUsers) => set({ presenceUsers }),
+
+  setUserPermission: (userId, permission) => {
+    set((state) => ({
+      permissions: { ...state.permissions, [userId]: permission },
+    }));
+  },
+
+  initPermissions: (permissions) => {
+    const map: Record<string, "edit" | "view"> = {};
+    for (const { userId, permission } of permissions) {
+      map[userId] = permission;
+    }
+    set({ permissions: map });
+  },
 
   setDirty: (isDirty) => set({ isDirty }),
 

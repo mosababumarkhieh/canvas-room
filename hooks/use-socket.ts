@@ -15,19 +15,15 @@ type AppSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 interface UseSocketOptions {
   roomId: string;
   user: AuthUser;
+  ownerId: string;
 }
 
-export function useSocket({ roomId, user }: UseSocketOptions) {
+export function useSocket({ roomId, user, ownerId }: UseSocketOptions) {
   const socketRef = useRef<AppSocket | null>(null);
 
-  // Pull store actions once via getState() inside the effect so the effect
-  // dependency array stays stable — these Zustand actions never change identity.
   useEffect(() => {
     if (!roomId || !user.id) return;
 
-    // NEXT_PUBLIC_SOCKET_URL should be set when the socket server runs on a
-    // separate host (e.g. Railway). Leave it empty for local dev or when the
-    // full app runs on a single server (Railway full-deploy).
     const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ?? "";
     const socket: AppSocket = io(socketUrl, {
       transports: ["websocket", "polling"],
@@ -36,15 +32,13 @@ export function useSocket({ roomId, user }: UseSocketOptions) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      socket.emit("room:join", { roomId, user });
+      socket.emit("room:join", { roomId, user, ownerId });
     });
 
     socket.on("room:users", (users) => {
       useCanvasStore.getState().setPresenceUsers(users);
     });
 
-    // Remote mutations: do NOT set isDirty or push history.
-    // The sender's client is responsible for its own autosave.
     socket.on("object:draw", (object) => {
       useCanvasStore.getState().addRemoteObject(object);
     });
@@ -61,6 +55,11 @@ export function useSocket({ roomId, user }: UseSocketOptions) {
       useCanvasStore.getState().clearRemoteBoard();
     });
 
+    // Full board state sync from a remote undo/redo
+    socket.on("board:sync", (objects) => {
+      useCanvasStore.getState().syncRemoteBoard(objects);
+    });
+
     socket.on("cursor:update", (cursor) => {
       useCanvasStore.getState().updateCursor(cursor);
     });
@@ -69,12 +68,19 @@ export function useSocket({ roomId, user }: UseSocketOptions) {
       useCanvasStore.getState().removeCursor(userId);
     });
 
+    socket.on("room:permission-update", ({ userId, permission }) => {
+      useCanvasStore.getState().setUserPermission(userId, permission);
+    });
+
+    socket.on("room:permissions-init", (permissions) => {
+      useCanvasStore.getState().initPermissions(permissions);
+    });
+
     return () => {
       socket.emit("room:leave", roomId);
       socket.disconnect();
       socketRef.current = null;
     };
-  // Only reconnect when the actual room or user identity changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId, user.id]);
 
@@ -94,9 +100,17 @@ export function useSocket({ roomId, user }: UseSocketOptions) {
     socketRef.current?.emit("board:clear", roomId);
   }, [roomId]);
 
+  const emitBoardSync = useCallback((objects: WhiteboardObject[]) => {
+    socketRef.current?.emit("board:sync", { roomId, objects });
+  }, [roomId]);
+
   const emitCursor = useCallback((x: number, y: number) => {
     socketRef.current?.emit("cursor:move", { roomId, x, y });
   }, [roomId]);
 
-  return { emitDraw, emitUpdate, emitDelete, emitClear, emitCursor };
+  const emitSetPermission = useCallback((targetUserId: string, permission: "edit" | "view") => {
+    socketRef.current?.emit("room:set-permission", { roomId, targetUserId, permission });
+  }, [roomId]);
+
+  return { emitDraw, emitUpdate, emitDelete, emitClear, emitBoardSync, emitCursor, emitSetPermission };
 }

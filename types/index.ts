@@ -50,7 +50,8 @@ export type DrawingTool =
   | "circle"
   | "line"
   | "text"
-  | "select";
+  | "select"
+  | "pan";
 
 export type WhiteboardObjectType =
   | "pen"
@@ -140,15 +141,22 @@ export interface ObjectDelete {
   roomId: string;
 }
 
+export interface PermissionUpdate {
+  userId: string;
+  permission: "edit" | "view";
+}
+
 // Socket event map (client → server)
 export interface ClientToServerEvents {
-  "room:join": (payload: { roomId: string; user: AuthUser }) => void;
+  "room:join": (payload: { roomId: string; user: AuthUser; ownerId: string }) => void;
   "room:leave": (roomId: string) => void;
   "cursor:move": (payload: { roomId: string; x: number; y: number }) => void;
   "object:draw": (payload: DrawingUpdate) => void;
   "object:update": (payload: DrawingUpdate) => void;
   "object:delete": (payload: ObjectDelete) => void;
   "board:clear": (roomId: string) => void;
+  "board:sync": (payload: { roomId: string; objects: WhiteboardObject[] }) => void;
+  "room:set-permission": (payload: { roomId: string; targetUserId: string; permission: "edit" | "view" }) => void;
 }
 
 // Socket event map (server → client)
@@ -161,6 +169,9 @@ export interface ServerToClientEvents {
   "object:update": (object: WhiteboardObject) => void;
   "object:delete": (objectId: string) => void;
   "board:clear": () => void;
+  "board:sync": (objects: WhiteboardObject[]) => void;
+  "room:permission-update": (update: PermissionUpdate) => void;
+  "room:permissions-init": (permissions: PermissionUpdate[]) => void;
   error: (message: string) => void;
 }
 

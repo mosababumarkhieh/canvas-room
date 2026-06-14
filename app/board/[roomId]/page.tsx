@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Cloud, CloudOff, Loader2, Copy, Check } from "lucide-react";
+import {
+  ArrowLeft, Pencil, Cloud, CloudOff, Loader2, Copy, Check, PanelLeft, X,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSocket } from "@/hooks/use-socket";
 import { useAutosave } from "@/hooks/use-autosave";
@@ -12,6 +14,7 @@ import { Canvas } from "@/components/board/canvas";
 import { Toolbar } from "@/components/board/toolbar";
 import { PresenceBar } from "@/components/board/presence-bar";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { Room, WhiteboardObject } from "@/types";
 
 export default function BoardPage({ params }: { params: { roomId: string } }) {
@@ -23,27 +26,21 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
   const [loadingRoom, setLoadingRoom] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // useState initializers run on the server where window is undefined — always null.
-  // useEffect runs only on the client after hydration, so window.location is safe.
   const [shareToken, setShareToken] = useState<string | null>(null);
   useEffect(() => {
     setShareToken(new URLSearchParams(window.location.search).get("token"));
   }, []);
 
-  const { setObjects, undo, redo, clearBoard, presenceUsers } = useCanvasStore();
+  const { setObjects, undo, redo, clearBoard, presenceUsers, permissions } = useCanvasStore();
 
   const { saveStatus } = useAutosave(roomId);
 
-  // Load room + board state — waits until both user and shareToken are resolved.
   useEffect(() => {
-    // shareToken starts null and is set asynchronously by the effect above.
-    // We delay the load until the token effect has had a chance to run by
-    // checking whether the URL actually contains a token param.
     const urlHasToken = typeof window !== "undefined"
       && new URLSearchParams(window.location.search).has("token");
 
-    // If the URL has a token but shareToken hasn't been set yet, wait.
     if (!user || (urlHasToken && shareToken === null)) return;
 
     async function load() {
@@ -79,43 +76,51 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
     load();
   }, [user, roomId, shareToken, setObjects]);
 
-  // Socket setup (only after user and room are confirmed)
+  const ownerId = room?.ownerId ?? "";
+  const isOwner = user?.id === ownerId;
+
+  // canEdit: owner always can; others depend on their permission (default "edit")
+  const canEdit = isOwner || (permissions[user?.id ?? ""] ?? "edit") === "edit";
+
   const socket = useSocket(
     user && !loadingRoom && !error
-      ? { roomId, user }
-      : { roomId: "", user: { id: "", email: "", name: "", color: "" } }
+      ? { roomId, user, ownerId }
+      : { roomId: "", user: { id: "", email: "", name: "", color: "" }, ownerId: "" }
   );
 
   // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (!canEdit) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         const objects = undo();
-        if (objects) socket.emitClear();
+        if (objects !== null) socket.emitBoardSync(objects);
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
-        redo();
+        const objects = redo();
+        if (objects !== null) socket.emitBoardSync(objects);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undo, redo, socket]);
+  }, [undo, redo, socket, canEdit]);
 
   const handleUndo = () => {
+    if (!canEdit) return;
     const objects = undo();
-    if (objects !== null) {
-      // Broadcast clear + redraw for simplicity on undo/redo
-      socket.emitClear();
-    }
+    if (objects !== null) socket.emitBoardSync(objects);
   };
 
   const handleRedo = () => {
-    redo();
+    if (!canEdit) return;
+    const objects = redo();
+    if (objects !== null) socket.emitBoardSync(objects);
   };
 
   const handleClear = () => {
+    if (!canEdit) return;
     clearBoard();
     socket.emitClear();
   };
@@ -136,7 +141,6 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Auth redirect
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [authLoading, user, router]);
@@ -216,15 +220,42 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
           </Button>
 
           {/* Presence */}
-          {user && <PresenceBar users={presenceUsers} currentUserId={user.id} />}
+          {user && (
+            <PresenceBar
+              users={presenceUsers}
+              currentUserId={user.id}
+              isOwner={isOwner}
+              permissions={permissions}
+              onSetPermission={socket.emitSetPermission}
+            />
+          )}
         </div>
       </header>
 
       {/* Canvas area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar overlay for mobile */}
+        {sidebarOpen && (
+          <div
+            className="md:hidden fixed inset-0 z-10 bg-black/20"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* Left sidebar — tools */}
-        <div className="flex-none flex flex-col gap-2 p-2 overflow-y-auto">
-          <Toolbar onUndo={handleUndo} onRedo={handleRedo} onClear={handleClear} />
+        <div
+          className={cn(
+            "flex-none flex-col gap-2 p-2 z-20 overflow-y-auto",
+            "md:flex", // always visible on md+
+            sidebarOpen ? "flex fixed left-0 top-12 bottom-0 bg-zinc-50 border-r border-zinc-200 shadow-lg" : "hidden md:flex"
+          )}
+        >
+          <Toolbar
+            onUndo={handleUndo}
+            onRedo={handleRedo}
+            onClear={handleClear}
+            canEdit={canEdit}
+          />
         </div>
 
         {/* Canvas */}
@@ -232,8 +263,19 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
           <Canvas
             onObjectCommit={handleObjectCommit}
             onObjectDelete={handleObjectDelete}
+            onCursorMove={socket.emitCursor}
+            canEdit={canEdit}
           />
         </div>
+
+        {/* Mobile sidebar toggle button */}
+        <button
+          className="md:hidden absolute top-2 left-2 z-30 bg-white border border-zinc-200 shadow-sm rounded-lg p-2 text-zinc-600 hover:bg-zinc-50 transition-colors"
+          onClick={() => setSidebarOpen((v) => !v)}
+          aria-label="Toggle tools"
+        >
+          {sidebarOpen ? <X className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+        </button>
       </div>
     </div>
   );

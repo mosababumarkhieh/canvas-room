@@ -14,6 +14,7 @@ import {
   Undo2,
   Redo2,
   Trash2,
+  Hand,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,16 +22,18 @@ interface ToolbarProps {
   onUndo?: () => void;
   onRedo?: () => void;
   onClear?: () => void;
+  canEdit?: boolean;
 }
 
-const TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode }[] = [
+const TOOLS: { id: DrawingTool; label: string; icon: React.ReactNode; editOnly?: boolean }[] = [
   { id: "select", label: "Select (V)", icon: <MousePointer2 className="h-4 w-4" /> },
-  { id: "pen", label: "Pen (P)", icon: <Pen className="h-4 w-4" /> },
-  { id: "eraser", label: "Eraser (E)", icon: <Eraser className="h-4 w-4" /> },
-  { id: "line", label: "Line (L)", icon: <Minus className="h-4 w-4" /> },
-  { id: "rectangle", label: "Rectangle (R)", icon: <Square className="h-4 w-4" /> },
-  { id: "circle", label: "Circle (C)", icon: <Circle className="h-4 w-4" /> },
-  { id: "text", label: "Text (T)", icon: <Type className="h-4 w-4" /> },
+  { id: "pan", label: "Pan (H)", icon: <Hand className="h-4 w-4" /> },
+  { id: "pen", label: "Pen (P)", icon: <Pen className="h-4 w-4" />, editOnly: true },
+  { id: "eraser", label: "Eraser (E)", icon: <Eraser className="h-4 w-4" />, editOnly: true },
+  { id: "line", label: "Line (L)", icon: <Minus className="h-4 w-4" />, editOnly: true },
+  { id: "rectangle", label: "Rectangle (R)", icon: <Square className="h-4 w-4" />, editOnly: true },
+  { id: "circle", label: "Circle (C)", icon: <Circle className="h-4 w-4" />, editOnly: true },
+  { id: "text", label: "Text (T)", icon: <Type className="h-4 w-4" />, editOnly: true },
 ];
 
 const STROKE_COLORS = [
@@ -45,7 +48,7 @@ const FILL_COLORS = [
 
 const STROKE_WIDTHS = [1, 2, 4, 8];
 
-export function Toolbar({ onUndo, onRedo, onClear }: ToolbarProps) {
+export function Toolbar({ onUndo, onRedo, onClear, canEdit = true }: ToolbarProps) {
   const {
     activeTool, setActiveTool,
     strokeColor, setStrokeColor,
@@ -58,35 +61,45 @@ export function Toolbar({ onUndo, onRedo, onClear }: ToolbarProps) {
   return (
     <TooltipProvider delayDuration={400}>
       <div className="flex flex-col gap-1 p-2 bg-white rounded-xl border border-zinc-200 shadow-sm w-12 select-none">
-        {/* Tool buttons */}
-        {TOOLS.map((tool) => (
-          <Tooltip key={tool.id}>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setActiveTool(tool.id)}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-                  activeTool === tool.id
-                    ? "bg-indigo-600 text-white"
-                    : "text-zinc-600 hover:bg-zinc-100"
-                )}
-                aria-label={tool.label}
-              >
-                {tool.icon}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="right">{tool.label}</TooltipContent>
-          </Tooltip>
-        ))}
+        {TOOLS.map((tool) => {
+          const disabled = tool.editOnly && !canEdit;
+          return (
+            <Tooltip key={tool.id}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => !disabled && setActiveTool(tool.id)}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                    activeTool === tool.id
+                      ? "bg-indigo-600 text-white"
+                      : disabled
+                      ? "text-zinc-300 cursor-not-allowed"
+                      : "text-zinc-600 hover:bg-zinc-100"
+                  )}
+                  aria-label={tool.label}
+                  aria-disabled={disabled}
+                >
+                  {tool.icon}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {disabled ? "View only" : tool.label}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
 
         <div className="my-1 h-px bg-zinc-100" />
 
-        {/* Undo / Redo */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={onUndo}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 transition-colors"
+              disabled={!canEdit}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                canEdit ? "text-zinc-600 hover:bg-zinc-100" : "text-zinc-300 cursor-not-allowed"
+              )}
               aria-label="Undo (Ctrl+Z)"
             >
               <Undo2 className="h-4 w-4" />
@@ -99,7 +112,11 @@ export function Toolbar({ onUndo, onRedo, onClear }: ToolbarProps) {
           <TooltipTrigger asChild>
             <button
               onClick={onRedo}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 transition-colors"
+              disabled={!canEdit}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                canEdit ? "text-zinc-600 hover:bg-zinc-100" : "text-zinc-300 cursor-not-allowed"
+              )}
               aria-label="Redo (Ctrl+Y)"
             >
               <Redo2 className="h-4 w-4" />
@@ -110,12 +127,17 @@ export function Toolbar({ onUndo, onRedo, onClear }: ToolbarProps) {
 
         <div className="my-1 h-px bg-zinc-100" />
 
-        {/* Clear board */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={onClear}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-600 hover:bg-red-50 hover:text-red-500 transition-colors"
+              disabled={!canEdit}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                canEdit
+                  ? "text-zinc-600 hover:bg-red-50 hover:text-red-500"
+                  : "text-zinc-300 cursor-not-allowed"
+              )}
               aria-label="Clear board"
             >
               <Trash2 className="h-4 w-4" />
@@ -125,7 +147,7 @@ export function Toolbar({ onUndo, onRedo, onClear }: ToolbarProps) {
         </Tooltip>
       </div>
 
-      {/* Options panel — appears to the right of toolbar */}
+      {/* Options panel */}
       <div className="flex flex-col gap-3 p-3 bg-white rounded-xl border border-zinc-200 shadow-sm w-[168px] select-none">
         {/* Stroke color */}
         <div>

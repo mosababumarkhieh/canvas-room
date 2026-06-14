@@ -4,17 +4,17 @@ import type {
   ClientToServerEvents,
   ServerToClientEvents,
   PresenceUser,
-  WhiteboardObject,
+  PermissionUpdate,
 } from "@/types";
 
-// In-memory room state
 const roomPresence = new Map<string, Map<string, PresenceUser>>();
+const roomOwners = new Map<string, string>(); // roomId → ownerId (userId)
+const roomPermissions = new Map<string, Map<string, "edit" | "view">>(); // roomId → userId → permission
 
 export function initSocketServer(httpServer: HTTPServer) {
-  // Accept the configured app URL, or any origin in development.
   const allowedOrigin = process.env.NEXT_PUBLIC_APP_URL
     ? [process.env.NEXT_PUBLIC_APP_URL]
-    : true; // true = accept all origins (safe for local dev)
+    : true;
 
   const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: {
@@ -29,7 +29,7 @@ export function initSocketServer(httpServer: HTTPServer) {
     let currentRoomId: string | null = null;
     let currentUser: PresenceUser | null = null;
 
-    socket.on("room:join", ({ roomId, user }) => {
+    socket.on("room:join", ({ roomId, user, ownerId }) => {
       currentRoomId = roomId;
       currentUser = {
         userId: user.id,
@@ -45,7 +45,28 @@ export function initSocketServer(httpServer: HTTPServer) {
       }
       roomPresence.get(roomId)!.set(socket.id, currentUser);
 
-      // Broadcast updated presence list
+      // Record the room owner (first joiner sets it from the authoritative ownerId)
+      if (!roomOwners.has(roomId)) {
+        roomOwners.set(roomId, ownerId);
+      }
+
+      // Initialize permission store for this room
+      if (!roomPermissions.has(roomId)) {
+        roomPermissions.set(roomId, new Map());
+      }
+      const perms = roomPermissions.get(roomId)!;
+
+      // New users default to "edit"; owner always remains "edit"
+      if (!perms.has(user.id)) {
+        perms.set(user.id, "edit");
+      }
+
+      // Send the current permission state to this socket so it knows its own permission
+      const permsArray: PermissionUpdate[] = Array.from(perms.entries()).map(
+        ([uid, permission]) => ({ userId: uid, permission })
+      );
+      socket.emit("room:permissions-init", permsArray);
+
       const users = Array.from(roomPresence.get(roomId)!.values());
       io.to(roomId).emit("room:users", users);
     });
@@ -84,6 +105,20 @@ export function initSocketServer(httpServer: HTTPServer) {
       socket.to(roomId).emit("board:clear");
     });
 
+    // Broadcast a full board state snapshot (used after undo/redo)
+    socket.on("board:sync", ({ roomId, objects }) => {
+      socket.to(roomId).emit("board:sync", objects);
+    });
+
+    // Owner-only: change a user's permission
+    socket.on("room:set-permission", ({ roomId, targetUserId, permission }) => {
+      if (!currentUser) return;
+      if (roomOwners.get(roomId) !== currentUser.userId) return;
+
+      roomPermissions.get(roomId)?.set(targetUserId, permission);
+      io.to(roomId).emit("room:permission-update", { userId: targetUserId, permission });
+    });
+
     socket.on("disconnect", () => {
       if (currentRoomId) {
         roomPresence.get(currentRoomId)?.delete(socket.id);
@@ -94,9 +129,10 @@ export function initSocketServer(httpServer: HTTPServer) {
           socket.to(currentRoomId).emit("cursor:remove", currentUser.userId);
         }
 
-        // Clean up empty rooms
         if (roomPresence.get(currentRoomId)?.size === 0) {
           roomPresence.delete(currentRoomId);
+          roomOwners.delete(currentRoomId);
+          roomPermissions.delete(currentRoomId);
         }
       }
     });
