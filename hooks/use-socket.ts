@@ -57,6 +57,7 @@ export function useSocket({ roomId, user, ownerId }: UseSocketOptions) {
 
     // Full board state sync from a remote undo/redo
     socket.on("board:sync", (objects) => {
+      console.log("[socket] received board:sync", objects.length, "objects");
       useCanvasStore.getState().syncRemoteBoard(objects);
     });
 
@@ -69,6 +70,7 @@ export function useSocket({ roomId, user, ownerId }: UseSocketOptions) {
     });
 
     socket.on("room:permission-update", ({ userId, permission }) => {
+      console.log("[socket] received room:permission-update", { userId, permission });
       useCanvasStore.getState().setUserPermission(userId, permission);
     });
 
@@ -101,6 +103,7 @@ export function useSocket({ roomId, user, ownerId }: UseSocketOptions) {
   }, [roomId]);
 
   const emitBoardSync = useCallback((objects: WhiteboardObject[]) => {
+    console.log("[socket] emitBoardSync", { roomId, objectCount: objects.length, connected: !!socketRef.current?.connected });
     socketRef.current?.emit("board:sync", { roomId, objects });
   }, [roomId]);
 
@@ -109,6 +112,7 @@ export function useSocket({ roomId, user, ownerId }: UseSocketOptions) {
   }, [roomId]);
 
   const emitSetPermission = useCallback((targetUserId: string, permission: "edit" | "view") => {
+    console.log("[socket] emitSetPermission", { roomId, targetUserId, permission, connected: !!socketRef.current?.connected });
     socketRef.current?.emit("room:set-permission", { roomId, targetUserId, permission });
   }, [roomId]);
 

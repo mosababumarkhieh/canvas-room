@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -88,25 +88,30 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
       : { roomId: "", user: { id: "", email: "", name: "", color: "" }, ownerId: "" }
   );
 
-  // Broadcast a board state to all other clients by clearing then re-drawing every object
-  const broadcastBoard = (objects: WhiteboardObject[]) => {
-    socket.emitClear();
-    for (const obj of objects) socket.emitDraw(obj);
-  };
+  // Always-current ref to socket — avoids stale closures in event listeners
+  // (socket object changes every render; emitBoardSync ref inside it also changes when roomId loads)
+  const socketLatest = useRef(socket);
+  useEffect(() => { socketLatest.current = socket; });
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts — use socketLatest.current so the handler always has the real roomId/socket
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (!canEdit) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         const objects = undo();
-        if (objects !== null) broadcastBoard(objects);
+        if (objects !== null) {
+          console.log("[board] keyboard undo → emitBoardSync", objects.length, "objects");
+          socketLatest.current.emitBoardSync(objects);
+        }
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
         const objects = redo();
-        if (objects !== null) broadcastBoard(objects);
+        if (objects !== null) {
+          console.log("[board] keyboard redo → emitBoardSync", objects.length, "objects");
+          socketLatest.current.emitBoardSync(objects);
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -117,13 +122,19 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
   const handleUndo = () => {
     if (!canEdit) return;
     const objects = undo();
-    if (objects !== null) broadcastBoard(objects);
+    if (objects !== null) {
+      console.log("[board] button undo → emitBoardSync", objects.length, "objects");
+      socketLatest.current.emitBoardSync(objects);
+    }
   };
 
   const handleRedo = () => {
     if (!canEdit) return;
     const objects = redo();
-    if (objects !== null) broadcastBoard(objects);
+    if (objects !== null) {
+      console.log("[board] button redo → emitBoardSync", objects.length, "objects");
+      socketLatest.current.emitBoardSync(objects);
+    }
   };
 
   const handleClear = () => {

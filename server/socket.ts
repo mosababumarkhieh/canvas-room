@@ -107,14 +107,17 @@ export function initSocketServer(httpServer: HTTPServer) {
 
     // Broadcast a full board state snapshot (used after undo/redo)
     socket.on("board:sync", ({ roomId, objects }) => {
+      console.log(`[server] board:sync from ${socket.id} → room ${roomId}, ${objects.length} objects`);
       socket.to(roomId).emit("board:sync", objects);
     });
 
     // Change a user's permission (UI only shows this control to the room owner)
     socket.on("room:set-permission", ({ roomId, targetUserId, permission }) => {
+      console.log(`[server] room:set-permission: target=${targetUserId} perm=${permission} currentUser=${currentUser?.userId ?? "NULL"}`);
       if (!currentUser) return;
 
       roomPermissions.get(roomId)?.set(targetUserId, permission);
+      console.log(`[server] emitting room:permission-update to room ${roomId}`);
       io.to(roomId).emit("room:permission-update", { userId: targetUserId, permission });
     });
 
