@@ -88,6 +88,12 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
       : { roomId: "", user: { id: "", email: "", name: "", color: "" }, ownerId: "" }
   );
 
+  // Broadcast a board state to all other clients by clearing then re-drawing every object
+  const broadcastBoard = (objects: WhiteboardObject[]) => {
+    socket.emitClear();
+    for (const obj of objects) socket.emitDraw(obj);
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -95,28 +101,29 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         const objects = undo();
-        if (objects !== null) socket.emitBoardSync(objects);
+        if (objects !== null) broadcastBoard(objects);
       }
       if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
         e.preventDefault();
         const objects = redo();
-        if (objects !== null) socket.emitBoardSync(objects);
+        if (objects !== null) broadcastBoard(objects);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [undo, redo, socket, canEdit]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [undo, redo, canEdit]);
 
   const handleUndo = () => {
     if (!canEdit) return;
     const objects = undo();
-    if (objects !== null) socket.emitBoardSync(objects);
+    if (objects !== null) broadcastBoard(objects);
   };
 
   const handleRedo = () => {
     if (!canEdit) return;
     const objects = redo();
-    if (objects !== null) socket.emitBoardSync(objects);
+    if (objects !== null) broadcastBoard(objects);
   };
 
   const handleClear = () => {

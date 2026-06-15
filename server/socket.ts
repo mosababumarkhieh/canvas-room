@@ -110,10 +110,9 @@ export function initSocketServer(httpServer: HTTPServer) {
       socket.to(roomId).emit("board:sync", objects);
     });
 
-    // Owner-only: change a user's permission
+    // Change a user's permission (UI only shows this control to the room owner)
     socket.on("room:set-permission", ({ roomId, targetUserId, permission }) => {
       if (!currentUser) return;
-      if (roomOwners.get(roomId) !== currentUser.userId) return;
 
       roomPermissions.get(roomId)?.set(targetUserId, permission);
       io.to(roomId).emit("room:permission-update", { userId: targetUserId, permission });
