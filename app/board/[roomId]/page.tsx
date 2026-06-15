@@ -103,7 +103,6 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
         e.preventDefault();
         const objects = undo();
         if (objects !== null) {
-          console.log("[board] keyboard undo → emitBoardSync", objects.length, "objects");
           socketLatest.current.emitBoardSync(objects);
         }
       }
@@ -111,7 +110,6 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
         e.preventDefault();
         const objects = redo();
         if (objects !== null) {
-          console.log("[board] keyboard redo → emitBoardSync", objects.length, "objects");
           socketLatest.current.emitBoardSync(objects);
         }
       }
@@ -125,7 +123,6 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
     if (!canEdit) return;
     const objects = undo();
     if (objects !== null) {
-      console.log("[board] button undo → emitBoardSync", objects.length, "objects");
       socketLatest.current.emitBoardSync(objects);
     }
   };
@@ -134,7 +131,6 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
     if (!canEdit) return;
     const objects = redo();
     if (objects !== null) {
-      console.log("[board] button redo → emitBoardSync", objects.length, "objects");
       socketLatest.current.emitBoardSync(objects);
     }
   };
