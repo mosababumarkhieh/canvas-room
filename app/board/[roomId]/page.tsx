@@ -35,7 +35,12 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
 
   const { setObjects, undo, redo, clearBoard, presenceUsers, permissions } = useCanvasStore();
 
-  const { saveStatus } = useAutosave(roomId);
+  // Derive ownership early so useAutosave can gate on it
+  const ownerId = room?.ownerId ?? "";
+  const isOwner = user?.id === ownerId;
+
+  // Only the room owner autosaves — non-owners' changes reach the owner via socket sync
+  const { saveStatus } = useAutosave(roomId, isOwner);
 
   useEffect(() => {
     const urlHasToken = typeof window !== "undefined"
@@ -75,9 +80,6 @@ export default function BoardPage({ params }: { params: { roomId: string } }) {
 
     load();
   }, [user, roomId, shareToken, setObjects]);
-
-  const ownerId = room?.ownerId ?? "";
-  const isOwner = user?.id === ownerId;
 
   // canEdit: owner always can; others depend on their permission (default "edit")
   const canEdit = isOwner || (permissions[user?.id ?? ""] ?? "edit") === "edit";

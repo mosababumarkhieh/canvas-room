@@ -5,13 +5,13 @@ import { useCanvasStore } from "@/hooks/use-canvas-store";
 
 const AUTOSAVE_DELAY = 2000;
 
-export function useAutosave(roomId: string) {
+export function useAutosave(roomId: string, enabled = true) {
   const { objects, isDirty, setDirty } = useCanvasStore();
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
-    if (!isDirty) return;
+    if (!isDirty || !enabled) return;
 
     clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
@@ -36,7 +36,7 @@ export function useAutosave(roomId: string) {
     }, AUTOSAVE_DELAY);
 
     return () => clearTimeout(timerRef.current);
-  }, [objects, isDirty, roomId, setDirty]);
+  }, [objects, isDirty, roomId, setDirty, enabled]);
 
   return { saveStatus };
 }
